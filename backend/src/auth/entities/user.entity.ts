@@ -5,24 +5,30 @@ export class UserEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: "firstName", type: "varchar", length: 255, nullable: true })
+  @Column({ name: "firstName", type: "varchar", length: 255 })
   firstName: string;
 
-  @Column({ name: "lastName", type: "varchar", length: 255, nullable: true })
+  @Column({ name: "lastName", type: "varchar", length: 255 })
   lastName: string;
 
-  @Column({ type: "varchar", length: 255, unique: true })
-  email: string;
-
-  @Column({ type: "varchar", length: 20, nullable: true })
+  @Column({ type: "varchar", length: 255 })
   phone: string;
 
   @Column({ type: "varchar", length: 255 })
-  password: string; // MD5 hash
+  email: string;
 
-  @Column({ name: "fcm_token", type: "varchar", length: 255, nullable: true })
-  fcmToken: string;
+  @Column({ type: "varchar", length: 255 })
+  password: string;
 
-  @Column({ name: "device_type", type: "varchar", length: 50, nullable: true })
-  deviceType: string;
+  @Column({ type: "varchar", length: 255 })
+  address: string;
+
+  @Column({ type: "varchar", length: 255 })
+  state: string;
+
+  @Column({ type: "varchar", length: 255 })
+  city: string;
+
+  @Column({ type: "varchar", length: 255 })
+  pincode: string;
 }

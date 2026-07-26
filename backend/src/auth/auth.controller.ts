@@ -4,22 +4,35 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
+  Headers,
 } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiSecurity,
+  ApiHeader,
+  ApiBearerAuth,
 } from "@nestjs/swagger";
 
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
+import { RegistrationService } from "./registration.service";
+import { Public } from "src/common/decorators/public.decorator";
+import { RegistrationDto } from "./dto/registration.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { SetPasswordDto } from "./dto/set-password.dto";
+import { GoogleLoginDto } from "./dto/google-login.dto";
 
 @ApiTags("Auth")
 @ApiSecurity("app-key") // All auth routes require x-app-key
 @Controller("") // prefix is "api" from global prefix → /api/login
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly registrationService: RegistrationService,
+  ) {}
 
   /**
    * POST /api/login
@@ -42,7 +55,10 @@ export class AuthController {
       oneOf: [
         {
           title: "Admin / Seller / Marketing / Telecaller",
-          example: { message: "Login Successful", token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+          example: {
+            message: "Login Successful",
+            token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+          },
         },
         {
           title: "User",
@@ -71,5 +87,107 @@ export class AuthController {
   })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  // ─── POST /api/user/registration ────────────────────────────────────────────
+  @Public()
+  @Post("user/registration")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Register a new buyer/user account" })
+  @ApiResponse({
+    status: 200,
+    description: "Register Successful",
+    schema: {
+      example: {
+        status: "200",
+        message: "Register Successful",
+        token: "eyJ...",
+        totalQuantity: 0,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: "Validation Error – email or phone already exists",
+    schema: {
+      example: {
+        status: "401",
+        message: "Validation Error",
+        errors: { email: "This email is already registered" },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict – already registered as a seller",
+    schema: {
+      example: {
+        status: "409",
+        message: "This email/phone is already registered as a seller.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 500,
+    description: "Internal Error – registration failed",
+  })
+  async register(@Body() dto: RegistrationDto) {
+    return this.registrationService.register(dto);
+  }
+
+  @Public()
+  @Post("forgotpassword")
+  @ApiOperation({ summary: "Send password reset OTP to registered email" })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post("setpassword")
+  @ApiOperation({ summary: "Verify OTP and reset password" })
+  async setPassword(@Body() dto: SetPasswordDto) {
+    return this.authService.setPassword(dto);
+  }
+
+  // ─── POST /api/googlelogin ──────────────────────────────────────────────
+  @Public() // bypasses JwtAuthGuard — still runs behind appauth/cors filters
+  @Post("googlelogin")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Google OAuth login/registration",
+    description:
+      "Checks user table, then seller table, then auto-registers a new user.",
+  })
+  async googleLogin(@Body() dto: GoogleLoginDto) {
+    return this.authService.googleLogin(dto);
+  }
+
+  // ─── POST /api/logout ───────────────────────────────────────────────────
+  @Post("logout")
+  @HttpCode(200)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Delete the current session token" })
+  @ApiHeader({ name: "Authorization", description: "Bearer <JWT token>" })
+  async logout(@Headers("authorization") authHeader: string) {
+    const token = this.extractBearerToken(authHeader);
+    return this.authService.logout(token);
+  }
+
+  // ─── POST /api/logoutforall ──────────────────────────────────────────────
+  @Post("logoutforall")
+  @HttpCode(200)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Delete all sessions for the current user" })
+  async logoutForAll(@Headers("authorization") authHeader: string) {
+    const token = this.extractBearerToken(authHeader);
+    return this.authService.logoutForAll(token);
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  private extractBearerToken(authHeader?: string): string {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw new UnauthorizedException("Token not provided");
+    }
+    return authHeader.slice("Bearer ".length).trim();
   }
 }

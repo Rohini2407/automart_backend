@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { RegistrationService } from "./registration.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 
 import { AdminEntity } from "./entities/admin.entity";
@@ -15,6 +16,8 @@ import { MarketingEntity } from "./entities/marketing.entity";
 import { TelecallerEntity } from "./entities/telecaller.entity";
 import { AuthEntity } from "./entities/auth.entity";
 import { CartEntity } from "./entities/cart.entity";
+import { OtpEntity } from "./entities/otp.entity";
+import { MailService } from "src/common/mail/mail.service";
 
 @Module({
   imports: [
@@ -36,10 +39,12 @@ import { CartEntity } from "./entities/cart.entity";
       TelecallerEntity,
       AuthEntity,
       CartEntity,
+      OtpEntity,
+      OtpEntity,
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, RegistrationService, JwtStrategy, MailService],
+  exports: [AuthService, RegistrationService, JwtModule],
 })
 export class AuthModule {}
