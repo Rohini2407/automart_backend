@@ -3,11 +3,13 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { CacheModule } from "@nestjs/cache-manager";
-import * as redisStore from "cache-manager-ioredis";
+import { Keyv } from "keyv";
+import KeyvRedis from "@keyv/redis";
 
 import { AuthModule } from "./auth/auth.module";
+import { ProductsModule } from "./products/products.module";
 
-// ─── Entities ─────────────────────────────────────────────────────────────────
+// ─── Entities ─────────────────────────────────────────────────────────────
 import { AdminEntity } from "./auth/entities/admin.entity";
 import { UserEntity } from "./auth/entities/user.entity";
 import { SellerEntity } from "./auth/entities/seller.entity";
@@ -15,6 +17,9 @@ import { MarketingEntity } from "./auth/entities/marketing.entity";
 import { TelecallerEntity } from "./auth/entities/telecaller.entity";
 import { AuthEntity } from "./auth/entities/auth.entity";
 import { CartEntity } from "./auth/entities/cart.entity";
+import { OtpEntity } from "./auth/entities/otp.entity";
+import { ProductInfoEntity } from "./products/entities/product-info.entity";
+import { ProductImagesEntity } from "./products/entities/product-images.entity";
 
 @Module({
   imports: [
@@ -39,6 +44,9 @@ import { CartEntity } from "./auth/entities/cart.entity";
           TelecallerEntity,
           AuthEntity,
           CartEntity,
+          OtpEntity,
+          ProductInfoEntity,
+          ProductImagesEntity,
         ],
         synchronize: false, // Never true in prod — use migrations
         logging: config.get("NODE_ENV") === "development",
@@ -46,15 +54,24 @@ import { CartEntity } from "./auth/entities/cart.entity";
       inject: [ConfigService],
     }),
 
-    // ─── Redis Cache ──────────────────────────────────────────────────────────
+    // ─── Redis Cache (cache-manager v5 / @nestjs/cache-manager v2) ────────────
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        store: redisStore,
-        host: config.get("REDIS_HOST", "localhost"),
-        port: +config.get("REDIS_PORT", 6379),
-        ttl: +config.get("REDIS_TTL", 86400), // seconds
+        stores: [
+          new Keyv({
+            store: new KeyvRedis(
+              `redis://${config.get("REDIS_HOST", "localhost")}:${config.get(
+                "REDIS_PORT",
+                6379,
+              )}`,
+            ),
+          }),
+        ],
+        // v5 ttl is in MILLISECONDS (was seconds pre-v5) — REDIS_TTL env
+        // value stays in seconds, we convert here.
+        ttl: +config.get("REDIS_TTL", 86400) * 1000,
       }),
       inject: [ConfigService],
     }),
@@ -68,6 +85,7 @@ import { CartEntity } from "./auth/entities/cart.entity";
 
     // ─── Feature Modules ──────────────────────────────────────────────────────
     AuthModule,
+    ProductsModule,
   ],
 })
 export class AppModule {}
