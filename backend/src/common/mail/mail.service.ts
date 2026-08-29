@@ -58,4 +58,77 @@ export class MailService {
       html,
     });
   }
+
+  async sendOrderConfirmationEmail(
+    to: string,
+    orderId: string,
+    items: Array<{
+      productName: string;
+      imagePath: string | null;
+      quantity: number;
+      price: number;
+    }>,
+    total: number,
+  ): Promise<void> {
+    const rows = items
+      .map(
+        (i) => `
+      <tr>
+        <td style="padding:8px;">${i.productName}</td>
+        <td style="padding:8px; text-align:center;">${i.quantity}</td>
+        <td style="padding:8px; text-align:right;">₹${i.price}</td>
+      </tr>`,
+      )
+      .join("");
+
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      <h2>Order Confirmed</h2>
+      <p>Your order <strong>${orderId}</strong> has been placed successfully.</p>
+      <table style="width:100%; border-collapse: collapse;">${rows}</table>
+      <p style="text-align:right; font-weight:bold;">Total: ₹${total}</p>
+    </div>
+  `;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.config.get("SMTP_FROM", "AutoMart <no-reply@automart.com>"),
+        to,
+        subject: `AutoMart Order Confirmation - ${orderId}`,
+        html,
+      });
+    } catch (err) {
+      // Never let a failed email throw and roll back a placed order — log and move on.
+      console.error(`Failed to send order confirmation for ${orderId}`, err);
+    }
+  }
+
+  async sendSellerNotificationEmail(
+    sellerEmail: string,
+    orderId: string,
+    buyerName: string,
+    phone: string,
+    address: string,
+  ): Promise<void> {
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      <h2>New Order Received</h2>
+      <p>Order <strong>${orderId}</strong> (Cash on Delivery)</p>
+      <p><strong>Buyer:</strong> ${buyerName}<br/>
+         <strong>Phone:</strong> ${phone}<br/>
+         <strong>Address:</strong> ${address}</p>
+    </div>
+  `;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.config.get("SMTP_FROM", "AutoMart <no-reply@automart.com>"),
+        to: sellerEmail,
+        subject: `New Order - ${orderId}`,
+        html,
+      });
+    } catch (err) {
+      console.error(`Failed to send seller notification for ${orderId}`, err);
+    }
+  }
 }

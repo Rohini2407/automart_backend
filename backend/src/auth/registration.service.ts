@@ -8,15 +8,13 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { JwtService } from "@nestjs/jwt";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
 import * as bcrypt from "bcrypt";
 import * as nodemailer from "nodemailer";
 
 import { RegistrationDto } from "./dto/registration.dto";
-import { UserEntity } from "./entities/user.entity";
-import { SellerEntity } from "./entities/seller.entity";
-import { AuthEntity } from "./entities/auth.entity";
-import { CartEntity } from "./entities/cart.entity";
+import { UserEntity, CartItem } from "./entities/user.entity";
+import { AuthTokenEntity } from "./entities/auth-token.entity";
 
 @Injectable()
 export class RegistrationService {
@@ -24,22 +22,13 @@ export class RegistrationService {
     @InjectRepository(UserEntity)
     private userRepo: Repository<UserEntity>,
 
-    @InjectRepository(SellerEntity)
-    private sellerRepo: Repository<SellerEntity>,
-
-    @InjectRepository(AuthEntity)
-    private authRepo: Repository<AuthEntity>,
-
-    @InjectRepository(CartEntity)
-    private cartRepo: Repository<CartEntity>,
-
+    private dataSource: DataSource,
     private jwtService: JwtService,
 
     @Inject(CACHE_MANAGER)
     private cacheManager: Cache,
   ) {}
 
-  // ─── Main Registration Entry Point ─────────────────────────────────────────
   async register(dto: RegistrationDto) {
     const {
       firstName,
@@ -47,15 +36,20 @@ export class RegistrationService {
       phone,
       email,
       password,
+      address,
+      state,
+      city,
+      pincode,
       guestID,
       fcm_token,
       device_type,
     } = dto;
 
-    // ── Step 1: Check seller conflict (email OR phone) ───────────────────────
-    const sellerConflict = await this.sellerRepo
-      .createQueryBuilder("s")
-      .where("s.email = :email OR s.phone = :phone", { email, phone })
+    // ── Step 1: Check seller conflict (email OR phone) ─────────────────────
+    const sellerConflict = await this.userRepo
+      .createQueryBuilder("u")
+      .where("u.role = :role", { role: "seller" })
+      .andWhere("(u.email = :email OR u.phone = :phone)", { email, phone })
       .getOne();
 
     if (sellerConflict) {
@@ -66,10 +60,10 @@ export class RegistrationService {
       });
     }
 
-    // ── Step 2: Check user uniqueness (email AND phone separately) ───────────
+    // ── Step 2: Check customer uniqueness ───────────────────────────────────
     const [existingByEmail, existingByPhone] = await Promise.all([
-      this.userRepo.findOne({ where: { email } }),
-      this.userRepo.findOne({ where: { phone } }),
+      this.userRepo.findOne({ where: { email, role: "customer" } }),
+      this.userRepo.findOne({ where: { phone, role: "customer" } }),
     ]);
 
     if (existingByEmail || existingByPhone) {
@@ -77,7 +71,6 @@ export class RegistrationService {
       if (existingByEmail) errors.email = "This email is already registered";
       if (existingByPhone)
         errors.phone = "This phone number is already registered";
-      // Return 401 validation-style response matching doc spec
       return {
         status: "401",
         message: "Validation Error",
@@ -85,83 +78,86 @@ export class RegistrationService {
       };
     }
 
-    // ── Step 3: Hash password ────────────────────────────────────────────────
+    // ── Step 3: Hash password ──────────────────────────────────────────────
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ── Step 4: Migrate guest cart → new email (before insert) ──────────────
-    if (guestID) {
-      await this.cartRepo
-        .createQueryBuilder()
-        .update(CartEntity)
-        .set({ email })
-        .where("email = :guestID", { guestID })
-        .execute();
-    }
+    // ── Step 4: Pull any guest cart out of Redis before the transaction ────
+    // Guest carts are no longer MySQL rows — see auth.service.ts notes on
+    // why they moved to Redis (`cart:guest:<guestID>`).
+    const guestItems = guestID
+      ? ((await this.cacheManager.get<CartItem[]>(`cart:guest:${guestID}`)) ??
+        [])
+      : [];
 
-    // ── Step 5: Insert new user ──────────────────────────────────────────────
+    // ── Step 5: Insert + session record as a single DB transaction ─────────
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     let savedUser: UserEntity;
+    let token: string;
+
     try {
-      const newUser = this.userRepo.create({
+      const newUser = queryRunner.manager.create(UserEntity, {
+        role: "customer",
         firstName,
         lastName: lastName ?? "",
         phone,
         email,
         password: hashedPassword,
+        address,
+        state,
+        city,
+        pincode,
+        cart: guestItems.length > 0 ? guestItems : null,
       });
-      savedUser = await this.userRepo.save(newUser);
-    } catch {
+      savedUser = await queryRunner.manager.save(newUser);
+
+      const payload = {
+        firstName: savedUser.firstName,
+        lastName: savedUser.lastName,
+        email: savedUser.email,
+        type: "user",
+      };
+      token = this.jwtService.sign(payload, { expiresIn: "30d" });
+
+      const authRecord = queryRunner.manager.create(AuthTokenEntity, {
+        email: savedUser.email,
+        tokenType: "session",
+        usertype: "customer",
+        fcmToken: fcm_token ?? null,
+        deviceType: (device_type as any) ?? null,
+      });
+      await queryRunner.manager.save(authRecord);
+
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      console.error("Registration transaction failed:", err);
       throw new InternalServerErrorException({
         status: "500",
         message: "Registration failed",
       });
+    } finally {
+      await queryRunner.release();
     }
 
-    // ── Step 6: Confirm insert by re-querying ────────────────────────────────
-    const confirmedUser = await this.userRepo.findOne({
-      where: { id: savedUser.id },
-    });
-    if (!confirmedUser) {
-      throw new InternalServerErrorException({
-        status: "500",
-        message: "Registration failed",
-      });
+    if (guestItems.length > 0) {
+      await this.cacheManager.del(`cart:guest:${guestID}`);
     }
 
-    // ── Step 7: Generate JWT ─────────────────────────────────────────────────
-    const payload = {
-      firstName: confirmedUser.firstName,
-      lastName: confirmedUser.lastName,
-      email: confirmedUser.email,
-      type: "user",
-    };
-    const token = this.jwtService.sign(payload, { expiresIn: "30d" });
-
-    // ── Step 8: Save auth record ─────────────────────────────────────────────
-    const authRecord = this.authRepo.create({
-      email: confirmedUser.email,
-      usertype: "user",
-      token,
-      fcmToken: fcm_token,
-      deviceType: device_type,
-    });
-    await this.authRepo.save(authRecord);
-
-    // Cache token in Redis
-    const cacheKey = `auth:${confirmedUser.email}:user`;
+    // ── Cache token in Redis (non-critical, outside transaction) ───────────
+    const cacheKey = `auth:${savedUser.email}:user`;
     await this.cacheManager.set(cacheKey, token, 30 * 24 * 60 * 60 * 1000);
 
-    // ── Step 9: Get cart total quantity ──────────────────────────────────────
-    const cartItems = await this.cartRepo.find({
-      where: { email: confirmedUser.email },
-    });
-    const totalQuantity = cartItems.reduce(
+    const totalQuantity = guestItems.reduce(
       (sum, item) => sum + item.quantity,
       0,
     );
 
-    // ── Step 10: Send welcome email (non-blocking) ───────────────────────────
-    this.sendWelcomeEmail(confirmedUser.email, confirmedUser.firstName).catch(
-      (err) => console.error("Welcome email failed:", err),
+    // ── Send welcome email (non-blocking, doesn't fail registration) ───────
+    this.sendWelcomeEmail(savedUser.email, savedUser.firstName).catch((err) =>
+      console.error("Welcome email failed:", err),
     );
 
     return {
@@ -172,17 +168,17 @@ export class RegistrationService {
     };
   }
 
-  // ─── Welcome Email ──────────────────────────────────────────────────────────
   private async sendWelcomeEmail(
     toEmail: string,
     firstName: string,
   ): Promise<void> {
     const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST ?? "smtp.mailtrap.io",
-      port: +(process.env.MAIL_PORT ?? 587),
+      host: process.env.SMTP_HOST,
+      port: +(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === "true",
       auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
@@ -201,7 +197,7 @@ export class RegistrationService {
     `;
 
     await transporter.sendMail({
-      from: "AutoMart <mail@auto-mart.co.in>",
+      from: process.env.SMTP_FROM ?? "AutoMart <no-reply@automart.com>",
       to: toEmail,
       subject: "Welcome to AutoMart!",
       html,

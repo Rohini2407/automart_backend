@@ -9,14 +9,8 @@ import { AuthService } from "./auth.service";
 import { RegistrationService } from "./registration.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 
-import { AdminEntity } from "./entities/admin.entity";
 import { UserEntity } from "./entities/user.entity";
-import { SellerEntity } from "./entities/seller.entity";
-import { MarketingEntity } from "./entities/marketing.entity";
-import { TelecallerEntity } from "./entities/telecaller.entity";
-import { AuthEntity } from "./entities/auth.entity";
-import { CartEntity } from "./entities/cart.entity";
-import { OtpEntity } from "./entities/otp.entity";
+import { AuthTokenEntity } from "./entities/auth-token.entity";
 import { MailService } from "src/common/mail/mail.service";
 
 @Module({
@@ -31,17 +25,10 @@ import { MailService } from "src/common/mail/mail.service";
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([
-      AdminEntity,
-      UserEntity,
-      SellerEntity,
-      MarketingEntity,
-      TelecallerEntity,
-      AuthEntity,
-      CartEntity,
-      OtpEntity,
-      OtpEntity,
-    ]),
+    // Replaces: AdminEntity, UserEntity(old), SellerEntity, MarketingEntity,
+    // TelecallerEntity, AuthEntity, CartEntity, OtpEntity — all merged into
+    // UserEntity (`users`) and AuthTokenEntity (`auth_tokens`).
+    TypeOrmModule.forFeature([UserEntity, AuthTokenEntity]),
   ],
   controllers: [AuthController],
   providers: [AuthService, RegistrationService, JwtStrategy, MailService],

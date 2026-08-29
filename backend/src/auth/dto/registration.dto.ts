@@ -37,6 +37,28 @@ export class RegistrationDto {
   @Length(8, 15, { message: "Password must be between 8 and 15 characters" })
   password: string;
 
+  @ApiProperty({ example: "123 MG Road, Near City Mall" })
+  @IsString()
+  @IsNotEmpty({ message: "Address is required" })
+  @Length(5, 255, { message: "Address must be between 5 and 255 characters" })
+  address: string;
+
+  @ApiProperty({ example: "Maharashtra" })
+  @IsString()
+  @IsNotEmpty({ message: "State is required" })
+  state: string;
+
+  @ApiProperty({ example: "Nashik" })
+  @IsString()
+  @IsNotEmpty({ message: "City is required" })
+  city: string;
+
+  @ApiProperty({ example: "422001" })
+  @IsString()
+  @IsNotEmpty({ message: "Pincode is required" })
+  @Matches(/^\d{6}$/, { message: "Pincode must be exactly 6 numeric digits" })
+  pincode: string;
+
   @ApiPropertyOptional({ example: "guest_abc123" })
   @IsOptional()
   @IsString()
