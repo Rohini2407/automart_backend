@@ -21,10 +21,6 @@ import { AddProductDto } from "./dto/add-product.dto";
 import { ProductsService } from "./products.service";
 import { AddProductImageDto } from "./dto/add-product-image.dto";
 
-// Memory storage: files are held in RAM as Buffers so we can compute the
-// final product_id-based filename (which depends on parsed form fields)
-// before writing anything to disk. Add fileSize limits appropriate to
-// your product photo sizes.
 const uploadOptions = {
   storage: memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
@@ -44,36 +40,96 @@ export class ProductsController {
     schema: {
       type: "object",
       properties: {
-        product_id: { type: "string" },
-        product_name: { type: "string" },
-        subTitle: { type: "string" },
-        main_category: { type: "string" },
-        sub_category: { type: "string" },
-        amount: { type: "number" },
-        discount_percentage: { type: "number" },
-        discount_amount: { type: "number" },
-        product_description: { type: "string" },
-        color: { type: "string" },
-        brand: { type: "string" },
-        seller: { type: "string" },
-        preturn: { type: "string" },
-        warranty: { type: "string" },
-        orderType: { type: "string" },
-        moq: { type: "number" },
-        file_count: { type: "integer" },
+        product_id: { type: "string", example: "12345" },
+        seller: { type: "string", example: "AutoMart" },
+        product_name: { type: "string", example: "Brake Pad Set" },
+        subTitle: { type: "string", example: "Front axle, ceramic compound" },
+        main_category: { type: "string", example: "Brakes" },
+        sub_category: { type: "string", example: "Brake Pads" },
+        color: { type: "string", example: "Black" },
+        brand: { type: "string", example: "Bosch" },
+        amount: { type: "number", example: 1499.0 },
+        discount_percentage: { type: "number", example: 10 },
+        discount_amount: { type: "number", example: 150 },
+        product_description: {
+          type: "string",
+          example: "High-performance ceramic brake pads...",
+        },
+        stock: { type: "integer", example: 100 },
+        warranty: { type: "string", example: "12 months" },
+
+        actualweight: { type: "number", example: 0.85 },
+        finalWeight: { type: "number", example: 0.95 },
+        length: { type: "number", example: 20 },
+        width: { type: "number", example: 15 },
+        height: { type: "number", example: 8 },
+        volumetricWeight: { type: "number", example: 1.92 },
+
+        fuelType: { type: "string", example: "Petrol" },
+        transmissionType: { type: "string", example: "Manual" },
+        vehicleBrand: { type: "string", example: "Maruti Suzuki" },
+        vehicleName: { type: "string", example: "Swift" },
+        vehicleVariant: { type: "string", example: "VXI" },
+
+        hsnCode: { type: "string", example: "87083000" },
+        gstPercentage: { type: "number", example: 18 },
+        expectedPrice: { type: "number", example: 1270.34 },
+        gstPrice: { type: "number", example: 1499.0 },
+
+        indirectFee: { type: "number", example: 20 },
+        platformFee: { type: "number", example: 50 },
+        shippingCharges: { type: "number", example: 80 },
+
+        partnumber: { type: "string", example: "BP-2044-FR" },
+        materialtype: { type: "string", example: "Rubber & Metal Alloy" },
+
+        preturn: { type: "string", enum: ["yes", "no"], example: "yes" },
+        stock_status: {
+          type: "string",
+          enum: ["in_stock", "out_of_stock", "low_stock"],
+          example: "in_stock",
+        },
+        productStatus: {
+          type: "string",
+          enum: ["active", "inactive", "draft"],
+          example: "active",
+        },
+        remark: { type: "string", example: "Pending QC review" },
+
+        file_count: { type: "integer", example: 2 },
         image0: { type: "string", format: "binary" },
         image1: { type: "string", format: "binary" },
-        // add as many image{n} placeholders as your max supported count;
-        // Swagger UI will show them all as optional file pickers.
+        // add more image{n} entries here if you support more per product
       },
       required: [
         "product_id",
+        "seller",
         "product_name",
+        "subTitle",
         "main_category",
         "sub_category",
+        "color",
+        "brand",
         "amount",
         "product_description",
-        "seller",
+        "warranty",
+        "actualweight",
+        "finalWeight",
+        "length",
+        "width",
+        "height",
+        "volumetricWeight",
+        "fuelType",
+        "transmissionType",
+        "vehicleBrand",
+        "vehicleName",
+        "vehicleVariant",
+        "hsnCode",
+        "gstPercentage",
+        "expectedPrice",
+        "gstPrice",
+        "partnumber",
+        "materialtype",
         "file_count",
       ],
     },
@@ -92,7 +148,6 @@ export class ProductsController {
           return res.status(403).json("Please Enter Unique Product ID");
 
         case "no_files":
-          // Matches documented (gap) behavior: no insert, no response body.
           return res.status(200).end();
 
         case "created":
@@ -123,6 +178,9 @@ export class ProductsController {
 
       if (result.kind === "success") {
         return res.status(200).json("Product images added successfully");
+      }
+      if (result.kind === "not_found") {
+        return res.status(404).json("Product not found");
       }
       return res.status(400).json(result.errors);
     } catch (err) {

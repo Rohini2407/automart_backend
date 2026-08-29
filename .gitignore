@@ -1,4 +1,56 @@
+# Dependencies
 node_modules/
-dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
 .env
+.env.local
+.env.development
+.env.test
+.env.production
+.env*.local
+
+# Build output
+dist/
+build/
+out/
+
+# Logs
+logs/
 *.log
+
+# Uploaded / test assets
+backend/assets/uploads/
+backend/assets/uploads/productimages/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Coverage / test reports
+coverage/
+.nyc_output/
+
+# PM2
+.pm2/
+
+# Optional: package manager lock conflicts (keep only one)
+# package-lock.json
+# yarn.lock
+
+# Misc
+*.pid
+*.seed
+*.pid.lock

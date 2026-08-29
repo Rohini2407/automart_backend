@@ -10,16 +10,12 @@ import { AuthModule } from "./auth/auth.module";
 import { ProductsModule } from "./products/products.module";
 
 // ─── Entities ─────────────────────────────────────────────────────────────
-import { AdminEntity } from "./auth/entities/admin.entity";
+import { OrderEntity } from "./orders/entities/order.entity";
+import { CartModule } from "./cart/cart.module";
+import { OrderModule } from "./orders/orders.module";
+import { AuthTokenEntity } from "./auth/entities/auth-token.entity";
 import { UserEntity } from "./auth/entities/user.entity";
-import { SellerEntity } from "./auth/entities/seller.entity";
-import { MarketingEntity } from "./auth/entities/marketing.entity";
-import { TelecallerEntity } from "./auth/entities/telecaller.entity";
-import { AuthEntity } from "./auth/entities/auth.entity";
-import { CartEntity } from "./auth/entities/cart.entity";
-import { OtpEntity } from "./auth/entities/otp.entity";
-import { ProductInfoEntity } from "./products/entities/product-info.entity";
-import { ProductImagesEntity } from "./products/entities/product-images.entity";
+import { ProductEntity } from "./products/entities/product.entity";
 
 @Module({
   imports: [
@@ -37,16 +33,10 @@ import { ProductImagesEntity } from "./products/entities/product-images.entity";
         password: config.get("DB_PASSWORD", ""),
         database: config.get("DB_NAME", "automart"),
         entities: [
-          AdminEntity,
           UserEntity,
-          SellerEntity,
-          MarketingEntity,
-          TelecallerEntity,
-          AuthEntity,
-          CartEntity,
-          OtpEntity,
-          ProductInfoEntity,
-          ProductImagesEntity,
+          ProductEntity,
+          OrderEntity,
+          AuthTokenEntity,
         ],
         synchronize: false, // Never true in prod — use migrations
         logging: config.get("NODE_ENV") === "development",
@@ -86,6 +76,8 @@ import { ProductImagesEntity } from "./products/entities/product-images.entity";
     // ─── Feature Modules ──────────────────────────────────────────────────────
     AuthModule,
     ProductsModule,
+    CartModule,
+    OrderModule,
   ],
 })
 export class AppModule {}
