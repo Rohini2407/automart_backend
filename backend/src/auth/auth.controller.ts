@@ -6,6 +6,8 @@ import {
   HttpStatus,
   UnauthorizedException,
   Headers,
+  UploadedFiles,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -14,6 +16,8 @@ import {
   ApiSecurity,
   ApiHeader,
   ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
 } from "@nestjs/swagger";
 
 import { AuthService } from "./auth.service";
@@ -24,6 +28,17 @@ import { RegistrationDto } from "./dto/registration.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { SetPasswordDto } from "./dto/set-password.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
+import { RegisterSellerDto } from "./dto/register-seller.dto";
+import { assertRequiredFiles, DOCUMENT_MIME_TYPES, firstFile, MAX_DOCUMENT_SIZE_BYTES, multerOptionsFor } from "src/common/utils/file-upload.util";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+
+type FileMap = Record<string, Express.Multer.File[]>;
+const SELLER_REQUIRED_DOCS = [
+  "personalProof",
+  "businessAddressProof",
+  "gstDocument",
+  "bankProof",
+];
 
 @ApiTags("Auth")
 @ApiSecurity("app-key") // All auth routes require x-app-key
@@ -189,5 +204,118 @@ export class AuthController {
       throw new UnauthorizedException("Token not provided");
     }
     return authHeader.slice("Bearer ".length).trim();
+  }
+
+  // ─── POST /api/seller/registration ──────────────────────────────────────
+  // NOTE: legacy route was `POST /api/regseller`. Renamed to match the
+  // `user/registration` convention already in this controller — if any
+  // existing client is hardcoded to `/api/regseller`, either rename this
+  // back or add a second @Post("regseller") pointing at the same handler.
+  @Public()
+  @Post("seller/registration")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Register a new seller account",
+    description:
+      "Requires 4 KYC documents (personalProof, businessAddressProof, gstDocument, bankProof). " +
+      "Account is created with status='pending' — seller cannot log in until an admin approves it.",
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    description: "Seller registration — all fields plus 4 KYC document files",
+    schema: {
+      type: "object",
+      required: [
+        "firstName",
+        "businessName",
+        "phone",
+        "email",
+        "address",
+        "city",
+        "state",
+        "pincode",
+        "bankAccountName",
+        "accountNumber",
+        "ifscCode",
+        "password",
+        "personalProof",
+        "businessAddressProof",
+        "gstDocument",
+        "bankProof",
+      ],
+      properties: {
+        firstName: { type: "string", example: "Rahul" },
+        lastName: { type: "string", example: "Kumar" },
+        businessName: { type: "string", example: "Kumar Auto Traders" },
+        phone: { type: "string", example: "9876543210" },
+        whatsapp: { type: "string", example: "9876543210" },
+        email: { type: "string", example: "rahul.kumar@example.com" },
+        address: { type: "string", example: "12 MG Road, Shivaji Nagar" },
+        city: { type: "string", example: "Pune" },
+        state: { type: "string", example: "Maharashtra" },
+        pincode: { type: "string", example: "411001" },
+        gstNumber: { type: "string", example: "27AAAPL1234C1Z5" },
+        shopActNumber: { type: "string", example: "SA-2023-00123" },
+        iecNumber: { type: "string", example: "IEC1234567890" },
+        bankAccountName: { type: "string", example: "Rahul Kumar" },
+        accountNumber: { type: "string", example: "123456789012" },
+        ifscCode: { type: "string", example: "HDFC0001234" },
+        password: { type: "string", example: "StrongPass@123" },
+        sellerType: {
+          type: "string",
+          enum: ["individual", "business"],
+          example: "individual",
+        },
+        personalProof: { type: "string", format: "binary" },
+        businessAddressProof: { type: "string", format: "binary" },
+        gstDocument: { type: "string", format: "binary" },
+        bankProof: { type: "string", format: "binary" },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      SELLER_REQUIRED_DOCS.map((name) => ({ name, maxCount: 1 })),
+      multerOptionsFor(
+        "seller-docs",
+        DOCUMENT_MIME_TYPES,
+        MAX_DOCUMENT_SIZE_BYTES,
+        (field) => field,
+      ),
+    ),
+  )
+  @ApiResponse({
+    status: 200,
+    description: "Seller Registration Successfully!",
+    schema: {
+      example: {
+        status: "200",
+        message: "Seller Registration Successfully!",
+        sellerId: "AMRK3210",
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: "Missing required document(s)" })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict – email already registered",
+    schema: {
+      example: {
+        status: "409",
+        message: "This email is already registered as a seller.",
+      },
+    },
+  })
+  async registerSeller(
+    @Body() dto: RegisterSellerDto,
+    @UploadedFiles() files: FileMap,
+  ) {
+    assertRequiredFiles(files, SELLER_REQUIRED_DOCS);
+    return this.registrationService.registerSeller(dto, {
+      personalProof: firstFile(files, "personalProof")!,
+      businessAddressProof: firstFile(files, "businessAddressProof")!,
+      gstDocument: firstFile(files, "gstDocument")!,
+      bankProof: firstFile(files, "bankProof")!,
+    });
   }
 }

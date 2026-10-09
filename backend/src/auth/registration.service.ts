@@ -15,6 +15,16 @@ import * as nodemailer from "nodemailer";
 import { RegistrationDto } from "./dto/registration.dto";
 import { UserEntity, CartItem } from "./entities/user.entity";
 import { AuthTokenEntity } from "./entities/auth-token.entity";
+import { RegisterSellerDto } from "./dto/register-seller.dto";
+import { generateSellerId } from "src/common/utils/id-generator.util";
+import md5 = require("md5");
+
+interface SellerDocFiles {
+  personalProof: Express.Multer.File;
+  businessAddressProof: Express.Multer.File;
+  gstDocument: Express.Multer.File;
+  bankProof: Express.Multer.File;
+}
 
 @Injectable()
 export class RegistrationService {
@@ -166,6 +176,149 @@ export class RegistrationService {
       token,
       totalQuantity,
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SELLER REGISTRATION — replaces the legacy `POST /api/regseller` PHP
+  // controller. Differs from customer `register()` in three deliberate ways:
+  //   1. No JWT is issued — a seller can't log in until an admin flips
+  //      `status` from 'pending' to 'active' (AuthService.login() already
+  //      enforces this gate).
+  //   2. Password is hashed with MD5, not bcrypt. This matches
+  //      AuthService.verifyPassword(), which still compares seller
+  //      passwords with `md5(password) === account.password` (preserved
+  //      from the legacy code). If you migrate sellers to bcrypt, both
+  //      sides need to change together — flagging this rather than
+  //      quietly fixing just one half and breaking seller login.
+  //   3. Uniqueness is a single `email` lookup across the whole `users`
+  //      table (email has a global UNIQUE constraint), instead of the
+  //      legacy code's separate seller+user table checks.
+  // ─────────────────────────────────────────────────────────────────────────
+  async registerSeller(dto: RegisterSellerDto, files: SellerDocFiles) {
+    const existing = await this.userRepo.findOne({
+      where: { email: dto.email },
+    });
+    if (existing) {
+      throw new ConflictException({
+        status: "409",
+        message:
+          existing.role === "seller"
+            ? "This email is already registered as a seller."
+            : "This email is already registered.",
+      });
+    }
+
+    const sellerId = generateSellerId(dto.firstName, dto.phone);
+    const hashedPassword = md5(dto.password);
+
+    const relPath = (subdir: string, file: Express.Multer.File) =>
+      `/assets/uploads/${subdir}/${file.filename}`;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let savedSeller: UserEntity;
+    try {
+      const newSeller = queryRunner.manager.create(UserEntity, {
+        role: "seller",
+        externalId: sellerId,
+        sellerType: dto.sellerType ?? "individual",
+        businessName: dto.businessName,
+        firstName: dto.firstName,
+        lastName: dto.lastName ?? null,
+        phone: dto.phone,
+        whatsapp: dto.whatsapp ?? null,
+        email: dto.email,
+        password: hashedPassword,
+        address: dto.address,
+        city: dto.city,
+        state: dto.state,
+        pincode: dto.pincode,
+        gstNumber: dto.gstNumber ?? null,
+        shopActNumber: dto.shopActNumber ?? null,
+        iecNumber: dto.iecNumber ?? null,
+        bankAccountName: dto.bankAccountName,
+        accountNumber: dto.accountNumber,
+        ifscCode: dto.ifscCode,
+        documents: {
+          personalProof: relPath("personalProof", files.personalProof),
+          businessAddressProof: relPath(
+            "businessAddressProof",
+            files.businessAddressProof,
+          ),
+          gstDocument: relPath("gstDocument", files.gstDocument),
+          bankProof: relPath("bankProof", files.bankProof),
+        },
+        // Replaces the legacy hardcoded acc_status = "Unverified" string.
+        // The schema's `status` enum only has active/inactive/pending, and
+        // AuthService.login() already gates seller login on status === 'active'.
+        status: "pending",
+      });
+      savedSeller = await queryRunner.manager.save(newSeller);
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      console.error("Seller registration transaction failed:", err);
+      throw new InternalServerErrorException({
+        status: "500",
+        message: "Seller registration failed",
+      });
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Non-blocking, matches the sendWelcomeEmail pattern above.
+    // TODO: add a `sendSellerRegistrationEmail(email, firstName, sellerId)`
+    // method to your existing MailService (src/common/mail/mail.service.ts) —
+    // reusing sendWelcomeEmail's transporter setup, just a different template.
+    this.sendSellerConfirmationEmail(
+      savedSeller.email,
+      savedSeller.firstName ?? "",
+      sellerId,
+    ).catch((err) => console.error("Seller confirmation email failed:", err));
+
+    return {
+      status: "200",
+      message: "Seller Registration Successfully!",
+      sellerId,
+    };
+  }
+
+  private async sendSellerConfirmationEmail(
+    toEmail: string,
+    firstName: string,
+    sellerId: string,
+  ): Promise<void> {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: +(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <body style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto;">
+          <h2 style="color: #e74c3c;">Welcome to AutoMart, ${firstName}!</h2>
+          <p>Your seller account (<strong>${sellerId}</strong>) has been created and is <strong>pending verification</strong>.</p>
+          <p>You'll be able to log in once our team reviews your documents.</p>
+          <br/>
+          <p><strong>Team AutoMart</strong></p>
+        </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM ?? "AutoMart <no-reply@automart.com>",
+      to: toEmail,
+      subject: "AutoMart Seller Registration Received",
+      html,
+    });
   }
 
   private async sendWelcomeEmail(

@@ -16,6 +16,12 @@ import { OrderModule } from "./orders/orders.module";
 import { AuthTokenEntity } from "./auth/entities/auth-token.entity";
 import { UserEntity } from "./auth/entities/user.entity";
 import { ProductEntity } from "./products/entities/product.entity";
+import { APP_FILTER } from "@nestjs/core";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { ListingsModule } from "./listings/listings.module";
+import { Listing } from "./listings/entities/listing.entity";
+import { SiteContentModule } from "./site-content/site-content.module";
+import { SiteContentEntity } from "./site-content/entities/site-content.entity";
 
 @Module({
   imports: [
@@ -37,6 +43,8 @@ import { ProductEntity } from "./products/entities/product.entity";
           ProductEntity,
           OrderEntity,
           AuthTokenEntity,
+          Listing,
+          SiteContentEntity,
         ],
         synchronize: false, // Never true in prod — use migrations
         logging: config.get("NODE_ENV") === "development",
@@ -78,6 +86,9 @@ import { ProductEntity } from "./products/entities/product.entity";
     ProductsModule,
     CartModule,
     OrderModule,
+    ListingsModule,
+    SiteContentModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: HttpExceptionFilter }],
 })
 export class AppModule {}
