@@ -30,6 +30,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
 
       message = typeof res === "string" ? res : message;
+    } else {
+      // TEMP: log the real exception so we can see what's actually being thrown
+      console.error("Unhandled exception reached filter:", exception);
     }
 
     return response.status(status).json({

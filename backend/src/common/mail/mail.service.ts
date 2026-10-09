@@ -131,4 +131,81 @@ export class MailService {
       console.error(`Failed to send seller notification for ${orderId}`, err);
     }
   }
+
+  async sendPreownedConfirmation(
+    to: string,
+    ownerName: string,
+    listingId: string,
+  ): Promise<void> {
+    // Per spec: an email failure must never fail the API response. The
+    // caller (ListingsService) invokes this without awaiting and catches
+    // the rejection itself.
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "Your vehicle has been listed on AutoMart",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+          <h2>Hi ${escapeHtml(ownerName)},</h2>
+          <p>Your pre-owned vehicle listing has been received successfully.</p>
+          <p><strong>Listing ID:</strong> ${escapeHtml(listingId)}</p>
+          <p>Our team will verify the details and your listing will go live shortly.</p>
+          <p>&mdash; Team AutoMart</p>
+        </div>
+      `,
+    });
+  }
+
+  async sendGarageConfirmation(
+    to: string,
+    ownerName: string,
+    listingId: string,
+  ): Promise<void> {
+    // Per spec: an email failure must never fail the API response. The
+    // caller (ListingsService) invokes this without awaiting and catches
+    // the rejection itself.
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "Your garage has been listed on AutoMart",
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+        <h2>Hi ${escapeHtml(ownerName)},</h2>
+        <p>Your garage listing has been received successfully.</p>
+        <p><strong>Listing ID:</strong> ${escapeHtml(listingId)}</p>
+        <p>Our team will verify the details and your listing will go live shortly.</p>
+        <p>&mdash; Team AutoMart</p>
+      </div>
+    `,
+    });
+  }
+
+  async sendTechnicianConfirmation(
+    to: string,
+    fullName: string,
+    listingId: string,
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "Your technician profile has been listed on AutoMart",
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+        <h2>Hi ${escapeHtml(fullName)},</h2>
+        <p>Your technician listing has been received successfully.</p>
+        <p><strong>Listing ID:</strong> ${escapeHtml(listingId)}</p>
+        <p>Our team will verify the details and your listing will go live shortly.</p>
+        <p>&mdash; Team AutoMart</p>
+      </div>
+    `,
+    });
+  }
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

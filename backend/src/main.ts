@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,8 +16,10 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-    })
+    }),
   );
+
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   // ─── CORS ───────────────────────────────────────────────────────────────────
   app.enableCors({
@@ -30,15 +33,15 @@ async function bootstrap() {
     .setTitle("AutoMart API")
     .setDescription(
       "AutoMart Backend API Documentation\n\n" +
-      "**Base URL (via Middleware):** http://localhost:3000\n\n" +
-      "**Auth:** Bearer JWT token — 30 day expiry\n\n" +
-      "**Password Hashing:** MD5\n\n" +
-      "All protected routes require `Authorization: Bearer <token>` header."
+        "**Base URL (via Middleware):** http://localhost:3000\n\n" +
+        "**Auth:** Bearer JWT token — 30 day expiry\n\n" +
+        "**Password Hashing:** MD5\n\n" +
+        "All protected routes require `Authorization: Bearer <token>` header.",
     )
     .setVersion("1.0")
     .addBearerAuth(
       { type: "http", scheme: "bearer", bearerFormat: "JWT", in: "header" },
-      "access-token"
+      "access-token",
     )
     .addApiKey({ type: "apiKey", name: "x-app-key", in: "header" }, "app-key")
     .addServer("http://localhost:4000", "Backend Direct")
