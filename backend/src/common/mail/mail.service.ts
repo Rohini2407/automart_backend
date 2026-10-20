@@ -200,6 +200,51 @@ export class MailService {
     `,
     });
   }
+
+  async sendBulkEnquiryAck(to: string, firstName: string): Promise<void> {
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "We received your bulk enquiry - AutoMart",
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+        <h2>Hi ${escapeHtml(firstName)},</h2>
+        <p>Thank you for your bulk purchase enquiry. Our team will review your requirement and contact you shortly.</p>
+        <p>&mdash; Team AutoMart</p>
+      </div>
+    `,
+    });
+  }
+
+  async sendContactUsAck(to: string, firstName: string): Promise<void> {
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "We received your message - AutoMart Support",
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+        <h2>Hi ${escapeHtml(firstName)},</h2>
+        <p>Thanks for contacting AutoMart support. We have received your message and will get back to you soon.</p>
+        <p>&mdash; Team AutoMart</p>
+      </div>
+    `,
+    });
+  }
+
+  async sendFeedbackThanks(to: string, name: string): Promise<void> {
+    await this.transporter.sendMail({
+      from: "AutoMart <mail@auto-mart.co.in>",
+      to,
+      subject: "Thank you for your feedback - AutoMart",
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+        <h2>Hi ${escapeHtml(name)},</h2>
+        <p>Thank you for taking the time to share your feedback. It helps us improve.</p>
+        <p>&mdash; Team AutoMart</p>
+      </div>
+    `,
+    });
+  }
 }
 
 function escapeHtml(input: string): string {

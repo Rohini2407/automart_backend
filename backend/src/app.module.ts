@@ -22,6 +22,13 @@ import { ListingsModule } from "./listings/listings.module";
 import { Listing } from "./listings/entities/listing.entity";
 import { SiteContentModule } from "./site-content/site-content.module";
 import { SiteContentEntity } from "./site-content/entities/site-content.entity";
+import { LeadsModule } from "./leads/leads.module";
+import { ShippingRateModule } from "./shippingRate/shippingRate.module";
+import { ShippingLabelModule } from "./shippingLabel/shippingLabel.module";
+import { CouponsModule } from "./coupons/coupons.module";
+import { ReviewsModule } from "./reviews/reviews.module";
+import { CouponEntity } from "./coupons/entities/coupon.entity";
+import { ProductReviewEntity } from "./reviews/entities/product-review.entity";
 
 @Module({
   imports: [
@@ -45,6 +52,8 @@ import { SiteContentEntity } from "./site-content/entities/site-content.entity";
           AuthTokenEntity,
           Listing,
           SiteContentEntity,
+          CouponEntity,
+          ProductReviewEntity,
         ],
         synchronize: false, // Never true in prod — use migrations
         logging: config.get("NODE_ENV") === "development",
@@ -88,6 +97,11 @@ import { SiteContentEntity } from "./site-content/entities/site-content.entity";
     OrderModule,
     ListingsModule,
     SiteContentModule,
+    LeadsModule,
+    ShippingRateModule,
+    ShippingLabelModule,
+    CouponsModule,
+    ReviewsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: HttpExceptionFilter }],
 })
