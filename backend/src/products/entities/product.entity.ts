@@ -172,6 +172,17 @@ export class ProductEntity {
   @Column({ name: "update_history", type: "text", nullable: true })
   updateHistory: string | null;
 
+  @Column({
+    name: "orderType",
+    type: "enum",
+    enum: ["retail", "wholesale"],
+    default: "retail",
+  })
+  orderType: string;
+
+  @Column({ name: "moq", type: "int", default: 1 })
+  moq: number;
+
   @CreateDateColumn({ name: "create_date" })
   createDate: Date;
 
